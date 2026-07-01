@@ -78,6 +78,57 @@ const defaultAssets = [
   }
 ];
 
+// --- POPULAR TAIWAN STOCKS ---
+const POPULAR_TW_STOCKS = [
+  { name: "台積電", ticker: "2330.TW" },
+  { name: "元大台灣50", ticker: "0050.TW" },
+  { name: "元大高股息", ticker: "0056.TW" },
+  { name: "國泰永續高股息", ticker: "00878.TW" },
+  { name: "群益台灣精選高息", ticker: "00919.TW" },
+  { name: "復華台灣科技優息", ticker: "00929.TW" },
+  { name: "鴻海", ticker: "2317.TW" },
+  { name: "聯發科", ticker: "2454.TW" },
+  { name: "聯電", ticker: "2303.TW" },
+  { name: "富邦金", ticker: "2881.TW" },
+  { name: "國泰金", ticker: "2882.TW" },
+  { name: "玉山金", ticker: "2884.TW" },
+  { name: "兆豐金", ticker: "2886.TW" },
+  { name: "中鋼", ticker: "2002.TW" },
+  { name: "長榮", ticker: "2603.TW" }
+];
+
+function renderQuickTWStocksPills() {
+  const container = document.getElementById("quick-tw-stocks");
+  if (!container) return;
+  
+  container.innerHTML = "";
+  
+  POPULAR_TW_STOCKS.forEach(stock => {
+    const pill = document.createElement("button");
+    pill.type = "button";
+    pill.className = "quick-pill";
+    pill.textContent = `${stock.name} (${stock.ticker.replace(".TW", "")})`;
+    
+    pill.addEventListener("click", () => {
+      // Set values
+      document.getElementById("asset-name").value = stock.name;
+      document.getElementById("asset-ticker").value = stock.ticker;
+      document.getElementById("asset-category").value = "stock";
+      document.getElementById("asset-currency").value = "TWD";
+      
+      // Update active styling
+      document.querySelectorAll(".quick-pill").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      
+      // Focus shares input
+      const sharesInput = document.getElementById("asset-shares");
+      if (sharesInput) sharesInput.focus();
+    });
+    
+    container.appendChild(pill);
+  });
+}
+
 // --- INITIALIZATION ---
 function initApp() {
   loadState();
@@ -85,6 +136,7 @@ function initApp() {
   setupEventListeners();
   renderApp();
   checkDailySync();
+  renderQuickTWStocksPills();
   
   // Set intervals for daily checks and UI animations
   setInterval(checkDailySync, 60000); // Check for 2:00 PM auto sync every minute
@@ -964,6 +1016,9 @@ function openAddAssetModal() {
   document.getElementById("delete-asset-btn").style.display = "none";
   selectedAssetId = null;
   
+  // Reset quick pills active state
+  document.querySelectorAll(".quick-pill").forEach(p => p.classList.remove("active"));
+  
   // Set default form values
   document.getElementById("asset-type").value = "manual";
   toggleFormFields("manual");
@@ -980,6 +1035,9 @@ function openAssetDetails(assetId) {
   document.getElementById("asset-form-title").textContent = "編輯資產帳戶";
   document.getElementById("delete-asset-btn").style.display = "block";
   
+  // Reset and highlight active pill if matches
+  document.querySelectorAll(".quick-pill").forEach(p => p.classList.remove("active"));
+  
   // Populate form
   document.getElementById("asset-name").value = asset.name;
   document.getElementById("asset-category").value = asset.category;
@@ -991,6 +1049,16 @@ function openAssetDetails(assetId) {
   if (asset.type === "stock") {
     document.getElementById("asset-ticker").value = asset.ticker || "";
     document.getElementById("asset-shares").value = asset.shares || "";
+    
+    // Highlight matching pill if any
+    const match = POPULAR_TW_STOCKS.find(s => s.ticker === asset.ticker);
+    if (match) {
+      document.querySelectorAll(".quick-pill").forEach(pill => {
+        if (pill.textContent.includes(match.name)) {
+          pill.classList.add("active");
+        }
+      });
+    }
   } else {
     document.getElementById("asset-value").value = asset.value || 0;
   }

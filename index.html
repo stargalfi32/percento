@@ -260,6 +260,12 @@
 
         <!-- Conditional Fields: Auto Stock -->
         <div class="form-row stock-only">
+          <div class="form-group" style="grid-column: 1 / 3; margin-bottom: 8px;">
+            <label class="form-label">台股快捷選擇</label>
+            <div id="quick-tw-stocks" class="quick-pills-container">
+              <!-- 快捷藥丸由 JS 渲染 -->
+            </div>
+          </div>
           <div class="form-group">
             <label class="form-label" for="asset-ticker">股票/幣價代碼</label>
             <input type="text" id="asset-ticker" class="form-input" placeholder="例如：AAPL, 2330.TW, BTC-USD">
