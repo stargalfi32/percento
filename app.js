@@ -162,7 +162,18 @@ function loadState() {
 }
 
 function saveState() {
-  localStorage.setItem("percento_portfolio_state", JSON.stringify(state));
+  try {
+    localStorage.setItem("percento_portfolio_state", JSON.stringify(state));
+    return true;
+  } catch (e) {
+    console.error("LocalStorage save failed:", e);
+    if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+      showNotification("儲存失敗：本機儲存空間已滿，已為您自動壓縮歷史紀錄。請嘗試刪除部分歷史帳戶。", "error");
+    } else {
+      showNotification("儲存資料時發生錯誤。", "error");
+    }
+    return false;
+  }
 }
 
 function initializeMockData() {
@@ -315,11 +326,8 @@ function updateAssetHistoryLog(asset, value) {
     asset.history.push({ date: today, value: value });
   }
   
-  // Limit history entries to prevent localstorage bloat (e.g. max 365 records per asset)
-  if (asset.history.length > 365) {
-    asset.history.sort((a, b) => a.date.localeCompare(b.date));
-    asset.history = asset.history.slice(-365);
-  }
+  // Downsample history to prevent localstorage bloat (preserves long term trend with weekly points)
+  asset.history = downsampleHistory(asset.history);
 }
 
 // Smart 14:00 Auto Sync check
@@ -1277,6 +1285,44 @@ function parseCSV(text) {
   return lines;
 }
 
+function downsampleHistory(history) {
+  if (!history || history.length <= 90) return history;
+
+  const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+  const result = [];
+  
+  const thirtyDaysAgo = getDaysAgo(30);
+  const weeklyBuckets = {};
+
+  sorted.forEach(item => {
+    if (item.date >= thirtyDaysAgo) {
+      // Keep daily points for last 30 days
+      result.push(item);
+    } else {
+      // Group older points by calendar week
+      const date = new Date(item.date);
+      if (!isNaN(date.getTime())) {
+        const day = date.getDay();
+        const diff = date.getDate() - day;
+        const sunday = new Date(date.setDate(diff));
+        const weekKey = sunday.toISOString().split('T')[0];
+        
+        // Keep latest record of that week
+        weeklyBuckets[weekKey] = item;
+      } else {
+        result.push(item);
+      }
+    }
+  });
+
+  // Add weekly records
+  Object.keys(weeklyBuckets).sort().forEach(wk => {
+    result.push(weeklyBuckets[wk]);
+  });
+
+  return result.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 function importPercentoCSVData(csvText) {
   const parsedLines = parseCSV(csvText);
   if (parsedLines.length < 2) {
@@ -1395,7 +1441,7 @@ function importPercentoCSVData(csvText) {
       currency: latest.currency,
       type: type,
       value: latest.value,
-      history: history
+      history: downsampleHistory(history)
     };
 
     if (type === "stock") {
@@ -1414,10 +1460,12 @@ function importPercentoCSVData(csvText) {
       }
       history.forEach(h => combinedHistory[h.date] = h.value); // Overwrite with imported
       
-      existing.history = Object.keys(combinedHistory).map(d => ({
+      const rawHistory = Object.keys(combinedHistory).map(d => ({
         date: d,
         value: combinedHistory[d]
       })).sort((a, b) => a.date.localeCompare(b.date));
+
+      existing.history = downsampleHistory(rawHistory);
 
       existing.value = latest.value;
       existing.category = latest.category;
