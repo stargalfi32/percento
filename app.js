@@ -166,8 +166,8 @@ function saveState() {
 }
 
 function initializeMockData() {
-  state.assets = defaultAssets;
-  state.lastStockSync = new Date().toISOString();
+  state.assets = [];
+  state.lastStockSync = null;
   state.lastRatesUpdate = new Date().toISOString();
   saveState();
 }
@@ -1188,11 +1188,11 @@ function changeBaseCurrency(selectEl) {
 
 // Reset entire database
 function resetAllData() {
-  if (confirm("警告！這將清除所有資產記錄並恢復為預設範例資料。確定要執行嗎？")) {
+  if (confirm("警告！這將清除所有資產記錄。確定要全部清空並重新開始嗎？")) {
     localStorage.removeItem("percento_portfolio_state");
     loadState();
     renderApp();
-    showNotification("所有資料已重置！", "success");
+    showNotification("所有資料已清空！", "success");
   }
 }
 
