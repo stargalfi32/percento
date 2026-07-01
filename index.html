@@ -150,7 +150,15 @@
             </div>
             <div class="settings-row" onclick="triggerImport()">
               <div class="settings-row-label">
-                <i data-lucide="upload"></i> 匯入並還原資料
+                <i data-lucide="upload"></i> 匯入並還原資料 (JSON)
+              </div>
+              <div class="settings-row-control">
+                <i data-lucide="chevron-right"></i>
+              </div>
+            </div>
+            <div class="settings-row" onclick="triggerCSVImport()">
+              <div class="settings-row-label">
+                <i data-lucide="file-text"></i> 匯入 Percento CSV 檔案
               </div>
               <div class="settings-row-control">
                 <i data-lucide="chevron-right"></i>
@@ -167,8 +175,9 @@
           </div>
         </div>
         
-        <!-- Hidden file input for import -->
+        <!-- Hidden file inputs for import -->
         <input type="file" id="backup-file-input" style="display: none;" accept=".json" onchange="handleImportFile(event)">
+        <input type="file" id="csv-file-input" style="display: none;" accept=".csv" onchange="handleCSVImportFile(event)">
 
         <div class="settings-group" style="text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 11px;">
           <p>Percento v1.0.0 (純前端 PWA 版)</p>

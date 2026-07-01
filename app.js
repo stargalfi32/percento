@@ -1237,6 +1237,231 @@ function handleImportFile(event) {
   event.target.value = ""; // Reset
 }
 
+// --- CSV IMPORT (FROM PERCENTO) ---
+
+function triggerCSVImport() {
+  document.getElementById("csv-file-input").click();
+}
+
+function parseCSV(text) {
+  const lines = [];
+  let row = [""];
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const next = text[i+1];
+
+    if (c === '"') {
+      if (inQuotes && next === '"') {
+        row[row.length - 1] += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === ',' && !inQuotes) {
+      row.push('');
+    } else if ((c === '\r' || c === '\n') && !inQuotes) {
+      if (c === '\r' && next === '\n') {
+        i++;
+      }
+      lines.push(row);
+      row = [''];
+    } else {
+      row[row.length - 1] += c;
+    }
+  }
+  if (row.length > 1 || row[0] !== '') {
+    lines.push(row);
+  }
+  return lines;
+}
+
+function importPercentoCSVData(csvText) {
+  const parsedLines = parseCSV(csvText);
+  if (parsedLines.length < 2) {
+    throw new Error("CSV 檔案為空或無效。");
+  }
+
+  // Identify column indices based on keywords
+  const headers = parsedLines[0].map(h => h.trim().toLowerCase());
+  let dateIdx = -1;
+  let nameIdx = -1;
+  let categoryIdx = -1;
+  let currencyIdx = -1;
+  let valueIdx = -1;
+  let tickerIdx = -1;
+  let sharesIdx = -1;
+
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i];
+    if (h.includes("日期") || h.includes("date") || h.includes("time") || h.includes("時間")) {
+      dateIdx = i;
+    } else if (h.includes("名稱") || h.includes("name") || h.includes("asset") || h.includes("項目") || h.includes("帳戶")) {
+      nameIdx = i;
+    } else if (h.includes("類別") || h.includes("category") || h.includes("分類") || h.includes("型態")) {
+      categoryIdx = i;
+    } else if (h.includes("幣別") || h.includes("currency") || h.includes("貨幣") || h.includes("單位")) {
+      currencyIdx = i;
+    } else if (h.includes("金額") || h.includes("value") || h.includes("餘額") || h.includes("價值") || h.includes("金額") || h.includes("數值")) {
+      valueIdx = i;
+    } else if (h.includes("代碼") || h.includes("ticker") || h.includes("代號") || h.includes("標的")) {
+      tickerIdx = i;
+    } else if (h.includes("股數") || h.includes("shares") || h.includes("數量") || h.includes("單位數")) {
+      sharesIdx = i;
+    }
+  }
+
+  // Fallback defaults
+  if (nameIdx === -1) nameIdx = 0;
+  if (valueIdx === -1) valueIdx = headers.length > 1 ? 1 : -1;
+  if (dateIdx === -1) dateIdx = headers.length > 2 ? 2 : -1;
+
+  if (nameIdx === -1 || valueIdx === -1) {
+    throw new Error("無法偵測到資產『名稱』或『金額/餘額』欄位。");
+  }
+
+  const rows = [];
+  for (let i = 1; i < parsedLines.length; i++) {
+    const r = parsedLines[i];
+    if (r.length <= Math.max(nameIdx, valueIdx) || !r[nameIdx].trim()) continue;
+
+    const name = r[nameIdx].trim();
+    // Clean currency symbols, commas and spaces
+    const cleanValText = r[valueIdx].replace(/[^\d.-]/g, '');
+    const value = parseFloat(cleanValText) || 0;
+    
+    const dateText = dateIdx !== -1 && r[dateIdx] ? r[dateIdx].trim() : getLocalDateString();
+    const date = dateText.replace(/\//g, '-'); // Normalize format to YYYY-MM-DD
+
+    const categoryText = categoryIdx !== -1 && r[categoryIdx] ? r[categoryIdx].trim().toLowerCase() : "";
+    let category = "other";
+    if (categoryText.includes("現金") || categoryText.includes("流動") || categoryText.includes("存款") || categoryText.includes("cash") || categoryText.includes("liquid") || categoryText.includes("bank")) {
+      category = "cash";
+    } else if (categoryText.includes("股票") || categoryText.includes("證券") || categoryText.includes("基金") || categoryText.includes("stock") || categoryText.includes("etf") || categoryText.includes("investment")) {
+      category = "stock";
+    } else if (categoryText.includes("加密貨幣") || categoryText.includes("幣") || categoryText.includes("crypto") || categoryText.includes("bitcoin")) {
+      category = "crypto";
+    } else if (categoryText.includes("房產") || categoryText.includes("房地產") || categoryText.includes("固定") || categoryText.includes("real") || categoryText.includes("property")) {
+      category = "realestate";
+    }
+
+    const currency = currencyIdx !== -1 && r[currencyIdx] ? r[currencyIdx].trim().toUpperCase() : state.baseCurrency;
+    const ticker = tickerIdx !== -1 && r[tickerIdx] ? r[tickerIdx].trim().toUpperCase() : "";
+    const shares = sharesIdx !== -1 && r[sharesIdx] ? parseFloat(r[sharesIdx]) : 0;
+
+    rows.push({ name, value, date, category, currency, ticker, shares });
+  }
+
+  if (rows.length === 0) {
+    throw new Error("沒有找到任何有效的資產數據行。");
+  }
+
+  // Group rows by asset name
+  const grouped = {};
+  rows.forEach(r => {
+    if (!grouped[r.name]) {
+      grouped[r.name] = [];
+    }
+    grouped[r.name].push(r);
+  });
+
+  let importCount = 0;
+  Object.keys(grouped).forEach(name => {
+    const groupRows = grouped[name];
+    
+    // Sort descending by date to find the latest value
+    groupRows.sort((a, b) => b.date.localeCompare(a.date));
+    const latest = groupRows[0];
+
+    // Compile unique history points
+    const historyMap = {};
+    groupRows.forEach(r => {
+      if (!historyMap[r.date]) {
+        historyMap[r.date] = r.value;
+      }
+    });
+
+    const history = Object.keys(historyMap).map(d => ({
+      date: d,
+      value: historyMap[d]
+    })).sort((a, b) => a.date.localeCompare(b.date));
+
+    const type = (latest.ticker && latest.shares > 0) ? "stock" : "manual";
+    const importedAsset = {
+      id: "asset-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+      name: latest.name,
+      category: latest.category,
+      currency: latest.currency,
+      type: type,
+      value: latest.value,
+      history: history
+    };
+
+    if (type === "stock") {
+      importedAsset.ticker = latest.ticker;
+      importedAsset.shares = latest.shares;
+    }
+
+    // Merge logic: check if asset with same name exists
+    const existingIndex = state.assets.findIndex(a => a.name.trim().toLowerCase() === latest.name.toLowerCase());
+    if (existingIndex !== -1) {
+      const existing = state.assets[existingIndex];
+      // Merge histories
+      const combinedHistory = {};
+      if (existing.history) {
+        existing.history.forEach(h => combinedHistory[h.date] = h.value);
+      }
+      history.forEach(h => combinedHistory[h.date] = h.value); // Overwrite with imported
+      
+      existing.history = Object.keys(combinedHistory).map(d => ({
+        date: d,
+        value: combinedHistory[d]
+      })).sort((a, b) => a.date.localeCompare(b.date));
+
+      existing.value = latest.value;
+      existing.category = latest.category;
+      existing.currency = latest.currency;
+      existing.type = type;
+      if (type === "stock") {
+        existing.ticker = latest.ticker;
+        existing.shares = latest.shares;
+      } else {
+        existing.ticker = undefined;
+        existing.shares = undefined;
+      }
+    } else {
+      state.assets.push(importedAsset);
+    }
+    importCount++;
+  });
+
+  saveState();
+  return importCount;
+}
+
+function handleCSVImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const count = importPercentoCSVData(e.target.result);
+      renderApp();
+      showNotification(`成功匯入與合併了 ${count} 個資產帳戶！`, "success");
+      if (state.assets.some(a => a.type === "stock")) {
+        syncAllPrices(false);
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification(`匯入 CSV 失敗：${err.message || "格式不正確"}`, "error");
+    }
+  };
+  reader.readAsText(file, "UTF-8");
+  event.target.value = "";
+}
+
 // Make functions globally accessible
 window.initApp = initApp;
 window.openAddAssetModal = openAddAssetModal;
@@ -1248,4 +1473,6 @@ window.resetAllData = resetAllData;
 window.exportBackup = exportBackup;
 window.triggerImport = triggerImport;
 window.handleImportFile = handleImportFile;
+window.triggerCSVImport = triggerCSVImport;
+window.handleCSVImportFile = handleCSVImportFile;
 window.syncAllPrices = () => syncAllPrices(true);
