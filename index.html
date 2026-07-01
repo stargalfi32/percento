@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Percento - 個人資產與投資組合追蹤</title>
+  
+  <!-- iOS PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Percento">
+  <link rel="apple-touch-icon" href="https://img.icons8.com/gradient/512/financial-growth.png">
+  
+  <!-- Web Manifest -->
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- External CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body onload="initApp()">
+
+  <div id="app-container">
+    
+    <!-- Header -->
+    <header>
+      <h1 id="app-header-title">Percento</h1>
+      <div class="header-actions">
+        <!-- Sync Button -->
+        <button id="sync-assets-btn" class="icon-btn" title="同步股價與匯率">
+          <i data-lucide="refresh-cw" id="sync-btn-icon"></i>
+        </button>
+        <!-- Add Asset Button -->
+        <button onclick="openAddAssetModal()" class="icon-btn" title="新增資產帳戶">
+          <i data-lucide="plus"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main View Contents -->
+    <main>
+      
+      <!-- 1. DASHBOARD VIEW -->
+      <section id="view-dashboard" class="view-section active">
+        <!-- Net Worth Card -->
+        <div class="summary-container">
+          <div class="summary-label">總資產估值</div>
+          <div id="dashboard-total-value" class="summary-value">$0</div>
+          <div class="summary-change-row">
+            <div id="dashboard-trend-badge" class="trend-badge neutral">
+              載入中...
+            </div>
+            <div id="last-sync-time" class="last-update-text">未同步</div>
+          </div>
+        </div>
+
+        <!-- Net Worth Trend Chart -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <span class="chart-title">資產淨值走勢</span>
+            <div class="chart-period-selector">
+              <button class="period-btn active" data-period="1M">1M</button>
+              <button class="period-btn" data-period="3M">3M</button>
+              <button class="period-btn" data-period="1Y">1Y</button>
+              <button class="period-btn" data-period="ALL">ALL</button>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="portfolioChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Asset Allocation Breakdown -->
+        <div class="allocation-card">
+          <div class="allocation-title">資產配置比重</div>
+          <div id="allocation-bar" class="allocation-bar">
+            <!-- Segments populated by JS -->
+          </div>
+          <div id="allocation-list" class="allocation-list">
+            <!-- Items populated by JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. ASSETS LIST VIEW -->
+      <section id="view-assets" class="view-section">
+        <div class="section-header">
+          <span class="section-title">我的資產帳戶</span>
+          <button onclick="openAddAssetModal()" class="add-text-btn">
+            <i data-lucide="plus" style="width: 16px; height: 16px;"></i> 新增資產
+          </button>
+        </div>
+        <div id="assets-container" class="asset-list">
+          <!-- Assets dynamically populated by JS -->
+        </div>
+      </section>
+
+      <!-- 3. TRANSACTION HISTORY VIEW -->
+      <section id="view-history" class="view-section">
+        <div class="section-header">
+          <span class="section-title">資產變動日誌</span>
+        </div>
+        <div id="history-container" class="log-list">
+          <!-- History logs dynamically populated by JS -->
+        </div>
+      </section>
+
+      <!-- 4. SYSTEM SETTINGS VIEW -->
+      <section id="view-settings" class="view-section">
+        <div class="settings-group">
+          <div class="settings-group-title">個人偏好</div>
+          <div class="settings-card">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <i data-lucide="globe"></i> 基準貨幣
+              </div>
+              <div class="settings-row-control">
+                <select id="settings-base-currency" onchange="changeBaseCurrency(this)">
+                  <option value="TWD">新台幣 (TWD)</option>
+                  <option value="USD">美金 (USD)</option>
+                  <option value="EUR">歐元 (EUR)</option>
+                  <option value="JPY">日圓 (JPY)</option>
+                  <option value="CNY">人民幣 (CNY)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">資料管理</div>
+          <div class="settings-card">
+            <div class="settings-row" onclick="exportBackup()">
+              <div class="settings-row-label">
+                <i data-lucide="download"></i> 匯出備份資料 (JSON)
+              </div>
+              <div class="settings-row-control">
+                <i data-lucide="chevron-right"></i>
+              </div>
+            </div>
+            <div class="settings-row" onclick="triggerImport()">
+              <div class="settings-row-label">
+                <i data-lucide="upload"></i> 匯入並還原資料
+              </div>
+              <div class="settings-row-control">
+                <i data-lucide="chevron-right"></i>
+              </div>
+            </div>
+            <div class="settings-row" onclick="resetAllData()">
+              <div class="settings-row-label" style="color: var(--color-rose);">
+                <i data-lucide="trash-2" style="color: var(--color-rose);"></i> 清除所有資料並重置
+              </div>
+              <div class="settings-row-control">
+                <i data-lucide="chevron-right"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Hidden file input for import -->
+        <input type="file" id="backup-file-input" style="display: none;" accept=".json" onchange="handleImportFile(event)">
+
+        <div class="settings-group" style="text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 11px;">
+          <p>Percento v1.0.0 (純前端 PWA 版)</p>
+          <p style="margin-top: 6px;">資料皆儲存在本地瀏覽器緩存，請定期匯出備份。</p>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Tab Bar Navigation -->
+    <nav class="tab-bar">
+      <div class="tab-item active" data-view="dashboard">
+        <i data-lucide="pie-chart"></i>
+        <span>總覽</span>
+      </div>
+      <div class="tab-item" data-view="assets">
+        <i data-lucide="wallet"></i>
+        <span>資產</span>
+      </div>
+      <div class="tab-item" data-view="history">
+        <i data-lucide="clock"></i>
+        <span>歷史</span>
+      </div>
+      <div class="tab-item" data-view="settings">
+        <i data-lucide="settings"></i>
+        <span>設定</span>
+      </div>
+    </nav>
+
+  </div>
+
+  <!-- iOS Slide-up Modal Drawer (For Add / Edit Asset) -->
+  <div id="assetModal" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-drag-indicator"></div>
+      
+      <div class="modal-header">
+        <span id="asset-form-title" class="modal-title">新增資產帳戶</span>
+        <button class="modal-close-btn" onclick="closeModal('assetModal')">取消</button>
+      </div>
+
+      <form onsubmit="saveAssetForm(event)">
+        <!-- Asset Name -->
+        <div class="form-group">
+          <label class="form-label" for="asset-name">資產帳戶名稱</label>
+          <input type="text" id="asset-name" class="form-input" placeholder="例如：台積電、美金存摺、冷錢包" required>
+        </div>
+
+        <div class="form-row">
+          <!-- Asset Category -->
+          <div class="form-group">
+            <label class="form-label" for="asset-category">類別</label>
+            <select id="asset-category" class="form-select">
+              <option value="cash">現金與儲蓄</option>
+              <option value="stock">股票與 ETF</option>
+              <option value="crypto">加密貨幣</option>
+              <option value="realestate">房地產</option>
+              <option value="other">其他資產</option>
+            </select>
+          </div>
+
+          <!-- Base Currency for Asset -->
+          <div class="form-group">
+            <label class="form-label" for="asset-currency">帳戶貨幣</label>
+            <select id="asset-currency" class="form-select">
+              <option value="TWD">TWD</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="JPY">JPY</option>
+              <option value="CNY">CNY</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Asset Update Mode (Manual vs Auto Stock) -->
+        <div class="form-group">
+          <label class="form-label" for="asset-type">帳戶類型</label>
+          <select id="asset-type" class="form-select">
+            <option value="manual">手動更新餘額</option>
+            <option value="stock">自動追蹤股價/幣價 (Yahoo)</option>
+          </select>
+        </div>
+
+        <!-- Conditional Fields: Manual Value -->
+        <div class="form-group manual-only show">
+          <label class="form-label" for="asset-value">目前資產價值 (餘額)</label>
+          <input type="number" id="asset-value" class="form-input" placeholder="0" step="any" min="0">
+        </div>
+
+        <!-- Conditional Fields: Auto Stock -->
+        <div class="form-row stock-only">
+          <div class="form-group">
+            <label class="form-label" for="asset-ticker">股票/幣價代碼</label>
+            <input type="text" id="asset-ticker" class="form-input" placeholder="例如：AAPL, 2330.TW, BTC-USD">
+            <span style="font-size: 10px; color: var(--text-muted); display: block; margin-top: 4px;">台股須加 .TW，加密貨幣加 -USD</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="asset-shares">持有股數/數量</label>
+            <input type="number" id="asset-shares" class="form-input" placeholder="0" step="any" min="0">
+          </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" class="btn-primary">儲存帳戶</button>
+        
+        <!-- Delete Button (Only shown in Edit mode) -->
+        <button type="button" id="delete-asset-btn" class="btn-danger" style="display: none;" onclick="deleteAsset()">刪除資產帳戶</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Background Auto-loader Spinner -->
+  <div id="sync-spinner" style="display:none; position: fixed; top: 12px; right: 12px; background: rgba(0,0,0,0.8); border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px; font-size:11px; z-index:9999; pointer-events: none; color: var(--color-blue); font-weight:600;">
+     連線同步中...
+  </div>
+
+  <!-- Script logic -->
+  <script src="app.js"></script>
+</body>
+</html>

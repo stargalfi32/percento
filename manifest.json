@@ -1,0 +1,18 @@
+{
+  "short_name": "Percento",
+  "name": "Percento Portfolio Tracker",
+  "description": "極簡風資產與投資組合追蹤 App",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/gradient/512/financial-growth.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#0a0b0d",
+  "theme_color": "#0a0b0d",
+  "display": "standalone",
+  "orientation": "portrait"
+}
